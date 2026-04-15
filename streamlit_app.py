@@ -13,18 +13,46 @@ st.set_page_config(page_title="⚖️ eBay vs AT&T Classroom Game")
 st.title("⚖️ eBay vs AT&T Lawsuit Game")
 
 # Firebase credentials and config
+# Firebase credentials and config
 try:
-    firebase_key = st.secrets["firebase_key"]
     database_url = st.secrets["database_url"]
-    
+
+    # Build service account dict directly from TOML secrets
+    service_account = {
+        "type": st.secrets["type"],
+        "project_id": st.secrets["project_id"],
+        "private_key_id": st.secrets["private_key_id"],
+        "private_key": st.secrets["private_key"],
+        "client_email": st.secrets["client_email"],
+        "client_id": st.secrets["client_id"],
+        "auth_uri": st.secrets["auth_uri"],
+        "token_uri": st.secrets["token_uri"],
+        "auth_provider_x509_cert_url": st.secrets["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": st.secrets["client_x509_cert_url"],
+        "universe_domain": st.secrets["universe_domain"],
+    }
+
     if not firebase_admin._apps:
-        cred = credentials.Certificate(json.loads(firebase_key))
+        cred = credentials.Certificate(service_account)
         firebase_admin.initialize_app(cred, {
-            'databaseURL': database_url
+            "databaseURL": database_url
         })
+
 except KeyError:
     st.error("🔥 Firebase secrets not configured.")
     st.stop()
+#try:
+    #firebase_key = st.secrets["firebase_key"]
+    #database_url = st.secrets["database_url"]
+    
+    #if not firebase_admin._apps:
+        #cred = credentials.Certificate(json.loads(firebase_key))
+        #firebase_admin.initialize_app(cred, {
+            #'databaseURL': database_url
+        #})
+#except KeyError:
+    #st.error("🔥 Firebase secrets not configured.")
+    #st.stop()
 
 # Enhanced chart function
 def plot_enhanced_percentage_bar(choices, labels, title, player_type):
