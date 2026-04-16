@@ -221,6 +221,7 @@ if admin_password == "admin123":
             role = player_data.get("role", "Unknown")
             status = "🔴 Registered"
             activity = "Waiting for match"
+            paired_with = "Not yet matched"
             player_match = None
             for match_id, match_data in all_matches.items():
                 if name in [match_data.get("worker_player"), match_data.get("firm_player")]:
@@ -228,6 +229,7 @@ if admin_password == "admin123":
                     break
             if player_match:
                 if role == "Worker":
+                    paired_with = player_match.get("firm_player", "Unknown")
                     if "worker_choice" in player_match:
                         status = "🟢 Completed"
                         activity = f"Chose: {player_match['worker_choice']}"
@@ -235,6 +237,7 @@ if admin_password == "admin123":
                         status = "🟡 In Match"
                         activity = "Making effort decision..."
                 elif role == "Firm":
+                    paired_with = player_match.get("worker_player", "Unknown")
                     if "worker_choice" in player_match:
                         if player_match["worker_choice"] == "No Effort":
                             status = "🟢 Completed"
@@ -249,7 +252,14 @@ if admin_password == "admin123":
                         status = "🟡 In Match"
                         activity = "Waiting for worker..."
             extra_info = f"({player_data.get('ability', 'Unknown')})" if role == "Worker" else ""
-            player_status.append({"Player Name": name, "Role": role, "Status": status, "Activity": activity, "Extra Info": extra_info})
+            player_status.append({
+                "Player Name": name,
+                "Role": role,
+                "Paired With": paired_with,
+                "Status": status,
+                "Activity": activity,
+                "Extra Info": extra_info
+            })
         st.dataframe(pd.DataFrame(player_status), use_container_width=True)
 
     st.subheader("📈 Live Game Analytics")
@@ -297,14 +307,11 @@ if admin_password == "admin123":
             st.error("⚠ Number of players must be even (for pairing)")
 
     st.subheader("🎲 Role Management")
-    # Button to assign roles (only if registered players >= 2 and even)
     if total_registered >= 2 and total_registered % 2 == 0:
         if st.button("👥 Assign Roles (randomly half Workers, half Firms)"):
-            # Clear existing roles first
             for pname in all_players.keys():
                 db.reference(f"job_players/{pname}/role").delete()
                 db.reference(f"job_players/{pname}/ability").delete()
-            # Shuffle and assign
             player_names = list(all_players.keys())
             random.shuffle(player_names)
             half = total_registered // 2
@@ -315,7 +322,6 @@ if admin_password == "admin123":
                 db.reference(f"job_players/{pname}").update({"role": "Worker", "ability": ability})
             for pname in firm_names:
                 db.reference(f"job_players/{pname}").update({"role": "Firm"})
-            # Mark that roles have been assigned
             db.reference("job_roles_assigned").set(True)
             st.success(f"✅ Roles assigned: {len(worker_names)} Workers, {len(firm_names)} Firms")
             st.rerun()
@@ -323,7 +329,6 @@ if admin_password == "admin123":
         st.info(f"Need at least 2 registered players and an even number to assign roles. Currently {total_registered} players.")
 
     if st.button("🔄 Reassign Roles (clear and reassign)"):
-        # Clear all roles and abilities
         for pname in all_players.keys():
             db.reference(f"job_players/{pname}/role").delete()
             db.reference(f"job_players/{pname}/ability").delete()
@@ -547,7 +552,7 @@ if name:
         st.error("Invalid role. Please ask admin to reassign roles.")
         st.stop()
 
-    # Matching (same as before)
+    # Matching
     expected_players = db.reference("job_expected_players").get() or 0
     matches_ref = db.reference("job_matches")
     all_matches = matches_ref.get() or {}
@@ -602,7 +607,7 @@ if name:
         time.sleep(2)
         st.rerun()
 
-    # Gameplay (identical to before, no changes needed)
+    # Gameplay
     match_ref = matches_ref.child(player_match_id)
     match_data = match_ref.get()
 
@@ -646,11 +651,12 @@ if name:
 
     elif role == "Firm":
         st.subheader("🏢 Step 4: Firm's Response - Choose Job Offer")
+        # Force refresh of match_data each time
+        match_data = match_ref.get()  # Re-fetch to get latest worker choice
+        
         if "worker_choice" not in match_data:
             st.info("⏳ Waiting for Worker to make an effort decision...")
-            placeholder = st.empty()
-            if placeholder.button("🔄 Refresh now"):
-                st.rerun()
+            # Auto-refresh every 2 seconds
             time.sleep(2)
             st.rerun()
         elif match_data["worker_choice"] == "No Effort":
