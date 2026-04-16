@@ -652,11 +652,10 @@ if name:
     elif role == "Firm":
         st.subheader("🏢 Step 4: Firm's Response - Choose Job Offer")
         # Force refresh of match_data each time
-        match_data = match_ref.get()  # Re-fetch to get latest worker choice
+        match_data = match_ref.get()
         
         if "worker_choice" not in match_data:
             st.info("⏳ Waiting for Worker to make an effort decision...")
-            # Auto-refresh every 2 seconds
             time.sleep(2)
             st.rerun()
         elif match_data["worker_choice"] == "No Effort":
@@ -726,7 +725,7 @@ if name:
             st.balloons()
             st.success("✅ Your match is complete! Thank you for playing.")
 
-            # Show summary for Firm participants - only Theory vs Your Class Results (no charts)
+            # Show summary for Firm participants - only Theory vs Your Class Results (no charts, no extra bubble)
             if role == "Firm":
                 st.header("📊 Step 6: Summary Analysis - Class Results vs Game Theory")
                 all_matches = db.reference("job_matches").get() or {}
@@ -763,54 +762,7 @@ if name:
                             st.metric("Low Ability Choose Effort", f"{low_effort_pct:.1f}%", "Theory: ~0%")
                         else:
                             st.metric("Low Ability Choose Effort", "N/A", "Theory: ~0%")
-                    st.info("🎓 **You've experienced signaling and screening in the job market!**")
-
-            # Global summary after all matches complete - also only metrics
-            expected_players = db.reference("job_expected_players").get() or 0
-            all_matches = db.reference("job_matches").get() or {}
-            completed_matches = 0
-            for match_data in all_matches.values():
-                if "worker_choice" in match_data:
-                    if match_data["worker_choice"] == "No Effort" or "firm_choice" in match_data:
-                        completed_matches += 1
-            expected_matches = expected_players // 2
-            if completed_matches >= expected_matches:
-                st.header("📊 Step 6: Summary Analysis - Class Results vs Game Theory")
-                high_effort = []
-                low_effort = []
-                effort_responses = []
-                for match_data in all_matches.values():
-                    if "worker_choice" in match_data:
-                        ability = match_data["worker_ability"]
-                        choice = match_data["worker_choice"]
-                        if ability == "High":
-                            high_effort.append(choice)
-                        else:
-                            low_effort.append(choice)
-                        if choice == "Effort" and "firm_choice" in match_data:
-                            effort_responses.append(match_data["firm_choice"])
-                
-                st.subheader("🧮 Game Theory Predictions vs Your Class")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    if effort_responses:
-                        manager_pct = len([r for r in effort_responses if r == "Manager"]) / len(effort_responses) * 100
-                        st.metric("Firm Offers Manager (after Effort)", f"{manager_pct:.1f}%", "Theory: ~67%")
-                    else:
-                        st.metric("Firm Offers Manager", "N/A", "Theory: ~67%")
-                with col2:
-                    if high_effort:
-                        high_effort_pct = len([c for c in high_effort if c == "Effort"]) / len(high_effort) * 100
-                        st.metric("High Ability Choose Effort", f"{high_effort_pct:.1f}%", "Theory: ~100%")
-                    else:
-                        st.metric("High Ability Choose Effort", "N/A", "Theory: ~100%")
-                with col3:
-                    if low_effort:
-                        low_effort_pct = len([c for c in low_effort if c == "Effort"]) / len(low_effort) * 100
-                        st.metric("Low Ability Choose Effort", f"{low_effort_pct:.1f}%", "Theory: ~0%")
-                    else:
-                        st.metric("Low Ability Choose Effort", "N/A", "Theory: ~0%")
-                st.success("🎉 **Job Market Signaling Game Complete!**")
+                    # Removed the blue info bubble
 
 # Sidebar status
 st.sidebar.header("🎮 Game Status")
