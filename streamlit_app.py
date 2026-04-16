@@ -425,13 +425,6 @@ if admin_password == "admin123":
                 st.metric("Low Ability Choose Effort", f"{low_effort_pct:.1f}%", "Theory: ~0%")
             else:
                 st.metric("Low Ability Choose Effort", "N/A", "Theory: ~0%")
-        st.subheader("🔍 Bayesian Analysis")
-        if manager_responses:
-            st.info(f"""
-            **Key Insight**: When you see a worker choosing **Effort**, what's the probability they are High ability?
-            **Your Class Results**: {len(manager_responses)} effort choices were made. Firms offered Manager {len([r for r in manager_responses if r == "Manager"])} times ({manager_pct:.1f}%).
-            **Theoretical Prediction**: P(High | Effort) ≈ 100% in separating equilibrium. Effort is a credible signal when low types find it too costly.
-            """)
         st.success("🎉 **Job Market Signaling Game Complete!**")
         if st.button("🔄 Manual Refresh"):
             st.rerun()
@@ -460,8 +453,15 @@ This is a **job market signaling game** between two players:
 4. **If worker chooses Effort** → Firm decides: **Manager** or **Clerk**
 
 ### 💰 Payoff Matrix (Worker, Firm):
-**High Ability (33.3%):** Effort→Manager: (6,10), Effort→Clerk: (0,4), No Effort: (4,4)  
-**Low Ability (66.7%):** Effort→Manager: (3,0), Effort→Clerk: (-3,4), No Effort: (4,4)
+**High Ability (33.3%):**  
+- Effort → Manager: (6, 10)  
+- Effort → Clerk: (0, 4)  
+- No Effort: (4, 4)
+
+**Low Ability (66.7%):**  
+- Effort → Manager: (3, 0)  
+- Effort → Clerk: (-3, 4)  
+- No Effort: (4, 4)
 
 ### 🎮 Game Steps:
 **Step 1**: Player Registration  
@@ -628,7 +628,6 @@ if name:
         st.subheader("🏢 Step 4: Firm's Response - Choose Job Offer")
         if "worker_choice" not in match_data:
             st.info("⏳ Waiting for Worker to make an effort decision...")
-            # Auto-refresh every 2 seconds without blocking
             placeholder = st.empty()
             if placeholder.button("🔄 Refresh now"):
                 st.rerun()
@@ -703,7 +702,7 @@ if name:
             st.balloons()
             st.success("✅ Your match is complete! Thank you for playing.")
 
-            # Show summary for Firm participants
+            # Show summary for Firm participants (without Bayesian)
             if role == "Firm":
                 st.header("📊 Step 6: Summary Analysis - Class Results vs Game Theory")
                 all_matches = db.reference("job_matches").get() or {}
@@ -771,16 +770,9 @@ if name:
                             st.metric("Low Ability Choose Effort", f"{low_effort_pct:.1f}%", "Theory: ~0%")
                         else:
                             st.metric("Low Ability Choose Effort", "N/A", "Theory: ~0%")
-                    st.subheader("🔍 Bayesian Insight")
-                    if effort_responses:
-                        st.success(f"""
-                        **Key Discovery**: When you see a worker choosing **Effort**, the probability they are High ability is very high!
-                        **Your Experience**: {len(effort_responses)} effort choices made, firms offered Manager {len([r for r in effort_responses if r == "Manager"])} times.
-                        **Why?** High-ability workers find effort worthwhile (they get the manager job), while low-ability workers avoid effort because it's too costly.
-                        """)
                     st.info("🎓 **You've experienced signaling and screening in the job market!**")
 
-            # Global summary after all matches complete
+            # Global summary after all matches complete (without Bayesian)
             expected_players = db.reference("job_expected_players").get() or 0
             all_matches = db.reference("job_matches").get() or {}
             completed_matches = 0
@@ -867,13 +859,6 @@ if name:
                         st.metric("Low Ability Choose Effort", f"{low_effort_pct:.1f}%", "Theory: ~0%")
                     else:
                         st.metric("Low Ability Choose Effort", "N/A", "Theory: ~0%")
-                st.subheader("🔍 Bayesian Analysis")
-                if effort_responses:
-                    st.info(f"""
-                    **Key Insight**: When you see a worker choosing **Effort**, what's the probability they are High ability?
-                    **Your Class Results**: {len(effort_responses)} effort choices were made. Firms offered Manager {len([r for r in effort_responses if r == "Manager"])} times ({manager_pct:.1f}%).
-                    **Theoretical Prediction**: P(High | Effort) ≈ 100% in separating equilibrium.
-                    """)
                 st.success("🎉 **Job Market Signaling Game Complete!**")
 
 # Sidebar status
