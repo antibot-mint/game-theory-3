@@ -337,6 +337,7 @@ if admin_password == "admin123":
             db.reference("job_players").delete()
             db.reference("job_matches").delete()
             db.reference("job_expected_players").set(0)
+            db.reference("job_roles_assigned").delete()  # Clear the lock flag
             st.success("🧹 ALL game data cleared!")
             st.rerun()
 
@@ -492,20 +493,13 @@ if name:
         time.sleep(3)
         st.rerun()
 
-    # ----- BALANCED ROLE ASSIGNMENT (fixed) -----
-    # After all players are registered, ensure every player has a role
-    all_players = db.reference("job_players").get() or {}
-    registered_count = len(all_players)
-    
+    # ----- BALANCED ROLE ASSIGNMENT (atomic with flag) -----
     if registered_count >= expected_players:
-        # Check if any player is missing a role
-        missing_role = False
-        for pname, pdata in all_players.items():
-            if "role" not in pdata:
-                missing_role = True
-                break
+        # Use a dedicated flag to ensure roles are assigned only once
+        roles_assigned_ref = db.reference("job_roles_assigned")
+        roles_assigned = roles_assigned_ref.get()
         
-        if missing_role:
+        if not roles_assigned:
             # Assign roles to all players
             player_names = list(all_players.keys())
             random.shuffle(player_names)
@@ -519,13 +513,14 @@ if name:
             for pname in firm_names:
                 db.reference(f"job_players/{pname}").update({"role": "Firm"})
             
-            # Force a refresh so the current player picks up the new role
-            st.rerun()
+            # Set the flag so no other player re-assigns
+            roles_assigned_ref.set(True)
+            st.rerun()  # Refresh to load new roles
         
-        # Now get the current player's data again (after possible assignment)
+        # Now retrieve the current player's role
         player_info = player_ref.get()
         if not player_info or "role" not in player_info:
-            # Still no role? Wait a moment and refresh
+            # Wait a moment and retry
             st.warning("Setting up your role...")
             time.sleep(1)
             st.rerun()
