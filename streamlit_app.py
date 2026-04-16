@@ -492,30 +492,37 @@ if name:
         time.sleep(3)
         st.rerun()
 
-    st.success(f"🎮 All {expected_players} players registered! Starting the game...")
+    # ----- BALANCED ROLE ASSIGNMENT -----
+    # Once all players are registered, assign roles exactly half Workers, half Firms
+    # and assign abilities to Workers (High with prob 1/3, Low with prob 2/3)
+    # This must be done only once, after all players are present.
+    # We use a flag "roles_assigned" in the database to avoid re-assigning on every rerun.
+    roles_assigned_ref = db.reference("job_roles_assigned")
+    if not roles_assigned_ref.get():
+        # Get list of player names
+        player_names = list(all_players.keys())
+        random.shuffle(player_names)
+        half = expected_players // 2
+        worker_names = player_names[:half]
+        firm_names = player_names[half:]
+        
+        # Assign roles and abilities
+        for pname in worker_names:
+            ability = "High" if random.random() < 1/3 else "Low"
+            db.reference(f"job_players/{pname}").update({"role": "Worker", "ability": ability})
+        for pname in firm_names:
+            db.reference(f"job_players/{pname}").update({"role": "Firm"})
+        
+        roles_assigned_ref.set(True)
+        st.rerun()  # Refresh to load new roles
 
-    # Role assignment
-    existing_player = player_ref.get()
-    if not existing_player or "role" not in existing_player:
-        current_players = db.reference("job_players").get() or {}
-        worker_count = sum(1 for p in current_players.values() if p and p.get("role") == "Worker")
-        firm_count = sum(1 for p in current_players.values() if p and p.get("role") == "Firm")
-        if worker_count < (expected_players // 2):
-            role = "Worker"
-            is_high = random.random() < 1/3
-            ability = "High" if is_high else "Low"
-            player_ref.update({"role": role, "ability": ability})
-        else:
-            role = "Firm"
-            player_ref.update({"role": role})
-    else:
-        role = existing_player["role"]
-
+    # Retrieve player's role after assignment
     player_info = player_ref.get()
-    if not player_info:
-        st.error("Failed to retrieve player information. Please refresh the page.")
-        st.stop()
-    role = player_info.get("role")
+    if not player_info or "role" not in player_info:
+        st.warning("Setting up your role...")
+        time.sleep(1)
+        st.rerun()
+    role = player_info["role"]
 
     if role == "Worker":
         ability = player_info.get("ability")
@@ -529,13 +536,13 @@ if name:
             st.rerun()
     elif role == "Firm":
         st.success(f"🏢 **You are the Firm (receiver)**")
-        st.info("🎴 You don't know the worker's true ability - you must infer it from their effort choice!")
+        # Removed the message about not knowing ability
     else:
         st.warning("Setting up your role...")
         time.sleep(1)
         st.rerun()
 
-    # Matching
+    # Matching (unchanged, but now roles are balanced)
     matches_ref = db.reference("job_matches")
     all_matches = matches_ref.get() or {}
     player_match_id = None
@@ -598,18 +605,26 @@ if name:
         if "worker_choice" not in match_data:
             ability = match_data["worker_ability"]
             st.write(f"**Reminder**: Your ability is {ability}")
-            st.info("💡 **Strategic Note**: Effort can signal high ability, but it's costly for low-ability workers.")
-            worker_choice = st.radio("Choose your action:", ["Effort", "No Effort"])
-            if worker_choice == "No Effort":
-                st.info("📊 If you choose **No Effort**, the game ends immediately with payoffs (4 for you, 4 for the Firm).")
+            # Combined info bubble
+            if ability == "High":
+                st.info("""
+**If you choose Effort**, the Firm will then decide whether to offer you a Manager or Clerk position.
+
+- Manager → You get 6, Firm gets 10
+- Clerk → You get 0, Firm gets 4
+
+**If you choose No Effort**, the game ends immediately with payoffs (4 for you, 4 for the Firm).
+""")
             else:
-                st.info("📊 If you choose **Effort**, the Firm will then decide whether to offer you a Manager or Clerk position.")
-                if ability == "High":
-                    st.info("   - Manager → You get 6, Firm gets 10")
-                    st.info("   - Clerk → You get 0, Firm gets 4")
-                else:
-                    st.info("   - Manager → You get 3, Firm gets 0")
-                    st.info("   - Clerk → You get -3, Firm gets 4")
+                st.info("""
+**If you choose Effort**, the Firm will then decide whether to offer you a Manager or Clerk position.
+
+- Manager → You get 3, Firm gets 0
+- Clerk → You get -3, Firm gets 4
+
+**If you choose No Effort**, the game ends immediately with payoffs (4 for you, 4 for the Firm).
+""")
+            worker_choice = st.radio("Choose your action:", ["Effort", "No Effort"])
             if st.button("Submit Choice"):
                 match_ref.update({"worker_choice": worker_choice, "worker_timestamp": time.time()})
                 st.success(f"✅ You chose: {worker_choice}")
@@ -642,8 +657,7 @@ if name:
             worker_choice = match_data["worker_choice"]
             worker_player = match_data["worker_player"]
             st.info(f"💪 **{worker_player} chose: {worker_choice}**")
-            st.write("🤔 **Strategic Decision**: The worker invested effort. What does that signal about their ability?")
-            st.info("💡 **Think**: High-ability workers are more likely to invest effort because it's less costly for them.")
+            # Removed strategic messages
             firm_choice = st.radio("Choose job offer:", ["Manager", "Clerk"])
             if st.button("Submit Offer"):
                 match_ref.update({"firm_choice": firm_choice, "firm_timestamp": time.time()})
@@ -702,7 +716,7 @@ if name:
             st.balloons()
             st.success("✅ Your match is complete! Thank you for playing.")
 
-            # Show summary for Firm participants (without Bayesian)
+            # Show summary for Firm participants - only Theory vs Your Class Results (no charts)
             if role == "Firm":
                 st.header("📊 Step 6: Summary Analysis - Class Results vs Game Theory")
                 all_matches = db.reference("job_matches").get() or {}
@@ -718,38 +732,8 @@ if name:
                     high_choices = [r["choice"] for r in completed_results if r["ability"] == "High"]
                     low_choices = [r["choice"] for r in completed_results if r["ability"] == "Low"]
                     effort_responses = [r["firm_choice"] for r in completed_results if r["choice"] == "Effort" and r["firm_choice"]]
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if high_choices and low_choices:
-                            high_effort_pct = len([c for c in high_choices if c == "Effort"]) / len(high_choices) * 100
-                            low_effort_pct = len([c for c in low_choices if c == "Effort"]) / len(low_choices) * 100
-                            fig, ax = plt.subplots(figsize=(8, 5))
-                            bars = ax.bar(['High Ability', 'Low Ability'], [high_effort_pct, low_effort_pct], color=['#e74c3c', '#2ecc71'], alpha=0.8)
-                            ax.set_title("% Choosing Effort by Ability", fontsize=14, fontweight='bold')
-                            ax.set_ylabel("Percentage (%)")
-                            ax.set_ylim(0, 110)
-                            for bar, pct in zip(bars, [high_effort_pct, low_effort_pct]):
-                                ax.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 2, f'{pct:.1f}%', ha='center', va='bottom', fontweight='bold')
-                            ax.grid(True, alpha=0.3)
-                            plt.tight_layout()
-                            st.pyplot(fig)
-                        else:
-                            st.info("More data needed for ability comparison")
-                    with col2:
-                        if effort_responses:
-                            manager_pct = len([r for r in effort_responses if r == "Manager"]) / len(effort_responses) * 100
-                            fig, ax = plt.subplots(figsize=(8, 5))
-                            bars = ax.bar(['Manager', 'Clerk'], [manager_pct, 100-manager_pct], color=['#3498db', '#e74c3c'], alpha=0.8)
-                            ax.set_title("Firm Offers (after Effort)", fontsize=14, fontweight='bold')
-                            ax.set_ylabel("Percentage (%)")
-                            ax.set_ylim(0, 110)
-                            for bar, pct in zip(bars, [manager_pct, 100-manager_pct]):
-                                ax.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 2, f'{pct:.1f}%', ha='center', va='bottom', fontweight='bold')
-                            ax.grid(True, alpha=0.3)
-                            plt.tight_layout()
-                            st.pyplot(fig)
-                        else:
-                            st.info("No effort choices yet")
+                    
+                    # Only metrics, no charts
                     st.subheader("🧮 Theory vs Your Class Results")
                     col1, col2, col3 = st.columns(3)
                     with col1:
@@ -772,7 +756,7 @@ if name:
                             st.metric("Low Ability Choose Effort", "N/A", "Theory: ~0%")
                     st.info("🎓 **You've experienced signaling and screening in the job market!**")
 
-            # Global summary after all matches complete (without Bayesian)
+            # Global summary after all matches complete - also only metrics (no charts)
             expected_players = db.reference("job_expected_players").get() or 0
             all_matches = db.reference("job_matches").get() or {}
             completed_matches = 0
@@ -783,9 +767,7 @@ if name:
             expected_matches = expected_players // 2
             if completed_matches >= expected_matches:
                 st.header("📊 Step 6: Summary Analysis - Class Results vs Game Theory")
-                worker_choices = []
-                firm_choices = []
-                abilities = []
+                # Collect data
                 high_effort = []
                 low_effort = []
                 effort_responses = []
@@ -793,52 +775,13 @@ if name:
                     if "worker_choice" in match_data:
                         ability = match_data["worker_ability"]
                         choice = match_data["worker_choice"]
-                        worker_choices.append(choice)
-                        abilities.append(ability)
                         if ability == "High":
                             high_effort.append(choice)
                         else:
                             low_effort.append(choice)
                         if choice == "Effort" and "firm_choice" in match_data:
-                            firm_choice = match_data["firm_choice"]
-                            firm_choices.append(firm_choice)
-                            effort_responses.append(firm_choice)
-                st.subheader("🎯 Key Strategic Analysis")
-                col1, col2 = st.columns(2)
-                with col1:
-                    if high_effort and low_effort:
-                        high_effort_pct = len([c for c in high_effort if c == "Effort"]) / len(high_effort) * 100
-                        low_effort_pct = len([c for c in low_effort if c == "Effort"]) / len(low_effort) * 100
-                        fig, ax = plt.subplots(figsize=(8, 5))
-                        bars = ax.bar(['High Ability', 'Low Ability'], [high_effort_pct, low_effort_pct], color=['#e74c3c', '#2ecc71'], alpha=0.8)
-                        ax.set_title("% Choosing Effort by Worker Ability", fontsize=14, fontweight='bold')
-                        ax.set_ylabel("Percentage (%)")
-                        ax.set_ylim(0, 110)
-                        for bar, pct in zip(bars, [high_effort_pct, low_effort_pct]):
-                            ax.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 2, f'{pct:.1f}%', ha='center', va='bottom', fontweight='bold')
-                        ax.grid(True, alpha=0.3)
-                        plt.tight_layout()
-                        st.pyplot(fig)
-                    else:
-                        st.info("Need both high and low ability workers to show this analysis")
-                with col2:
-                    if effort_responses:
-                        manager_pct = len([r for r in effort_responses if r == "Manager"]) / len(effort_responses) * 100
-                        fig, ax = plt.subplots(figsize=(8, 5))
-                        manager_count = len([r for r in effort_responses if r == "Manager"])
-                        clerk_count = len([r for r in effort_responses if r == "Clerk"])
-                        percentages_vals = [manager_count/len(effort_responses)*100, clerk_count/len(effort_responses)*100]
-                        bars = ax.bar(['Manager', 'Clerk'], percentages_vals, color=['#3498db', '#e74c3c'], alpha=0.8)
-                        ax.set_title("Firm Job Offers (after Effort)", fontsize=14, fontweight='bold')
-                        ax.set_ylabel("Percentage (%)")
-                        ax.set_ylim(0, 110)
-                        for bar, pct in zip(bars, percentages_vals):
-                            ax.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 2, f'{pct:.1f}%', ha='center', va='bottom', fontweight='bold')
-                        ax.grid(True, alpha=0.3)
-                        plt.tight_layout()
-                        st.pyplot(fig)
-                    else:
-                        st.info("No effort choices made yet")
+                            effort_responses.append(match_data["firm_choice"])
+                
                 st.subheader("🧮 Game Theory Predictions vs Your Class")
                 col1, col2, col3 = st.columns(3)
                 with col1:
