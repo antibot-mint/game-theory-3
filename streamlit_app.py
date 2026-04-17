@@ -306,20 +306,22 @@ if admin_password == "admin123":
         else:
             st.error("⚠ Number of players must be even (for pairing)")
 
-    st.subheader("🔒 Registration Control")
-    registrations_locked = db.reference("job_registrations_locked").get() or False
-    if registrations_locked:
-        st.warning("🚫 Registrations are currently LOCKED. New players cannot join. Existing players can continue.")
-        if st.button("🔓 Unlock Registrations"):
-            db.reference("job_registrations_locked").set(False)
-            st.success("Registrations unlocked. New players can now join.")
+    st.subheader("🔒 Registration Limit")
+    registrations_full = db.reference("job_registrations_full").get() or False
+    if registrations_full:
+        st.warning(f"🚫 Registrations are automatically locked because {total_registered} players have registered (expected: {expected_players}). New players cannot join.")
+        if st.button("🔓 Force Unlock (allow more registrations)"):
+            db.reference("job_registrations_full").set(False)
+            st.success("Registration limit reset. New players can now join until the expected number is reached again.")
             st.rerun()
     else:
-        st.info("✅ Registrations are OPEN. New players can join.")
-        if st.button("🔒 Lock Registrations (stop new players)"):
-            db.reference("job_registrations_locked").set(True)
-            st.success("Registrations locked. Existing players can continue, but new players cannot join.")
+        if total_registered >= expected_players and expected_players > 0:
+            st.warning(f"⚠️ Registered players ({total_registered}) have reached or exceeded expected players ({expected_players}). New registrations will be blocked automatically.")
+            # Set the flag so new players see the lock
+            db.reference("job_registrations_full").set(True)
             st.rerun()
+        else:
+            st.info(f"✅ Registrations open. {total_registered}/{expected_players} registered. New players can join.")
 
     st.subheader("🎲 Role Management")
     if total_registered >= 2 and total_registered % 2 == 0:
@@ -437,7 +439,7 @@ if admin_password == "admin123":
             db.reference("job_expected_players").set(0)
             db.reference("job_roles_assigned").delete()
             db.reference("job_matching_done").delete()
-            db.reference("job_registrations_locked").delete()
+            db.reference("job_registrations_full").delete()
             st.success("🧹 ALL game data cleared!")
             st.rerun()
 
@@ -575,26 +577,36 @@ This is a **job market signaling game** between two players:
 **Step 6**: Summary Analysis
 """)
 
-# Registration
+# Registration with automatic lock based on expected player count
 name = st.text_input("Enter your name to join the game:")
 if name:
-    # Check if this name is already registered
-    existing_player = db.reference(f"job_players/{name}").get()
-    
-    # If it's a new player, check if registrations are locked
-    if not existing_player:
-        registrations_locked = db.reference("job_registrations_locked").get() or False
-        if registrations_locked:
-            st.error("❌ Registrations are currently locked by the admin. New players cannot join.")
-            st.stop()
-    
-    st.success(f"👋 Welcome, {name}!")
+    name = name.strip()
     player_ref = db.reference(f"job_players/{name}")
     player_data = player_ref.get()
-    if not player_data:
-        player_ref.set({"joined": True, "timestamp": time.time()})
-        st.write("✅ You are registered!")
-
+    
+    # Check if this is a new player
+    is_new = not player_data or "joined" not in player_data
+    
+    if is_new:
+        # Check if registrations are full (registered count >= expected)
+        current_registered = len(db.reference("job_players").get() or {})
+        expected = db.reference("job_expected_players").get() or 0
+        if expected > 0 and current_registered >= expected:
+            st.error(f"❌ Registrations are closed because the expected number of players ({expected}) has been reached.")
+            st.stop()
+        else:
+            # Register the new player
+            player_ref.set({"joined": True, "timestamp": time.time()})
+            st.success(f"👋 Welcome, {name}!")
+            st.write("✅ You are registered!")
+            # After registration, re-check the count and set the full flag if needed
+            new_count = len(db.reference("job_players").get() or {})
+            if new_count >= expected:
+                db.reference("job_registrations_full").set(True)
+            st.rerun()
+    else:
+        st.success(f"👋 Welcome back, {name}!")
+    
     # Check if roles have been assigned by the admin
     roles_assigned = db.reference("job_roles_assigned").get()
     if not roles_assigned:
