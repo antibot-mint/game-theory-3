@@ -309,7 +309,7 @@ if admin_password == "admin123":
     st.subheader("🔒 Registration Control")
     registrations_locked = db.reference("job_registrations_locked").get() or False
     if registrations_locked:
-        st.warning("🚫 Registrations are currently LOCKED. New players cannot join.")
+        st.warning("🚫 Registrations are currently LOCKED. New players cannot join. Existing players can continue.")
         if st.button("🔓 Unlock Registrations"):
             db.reference("job_registrations_locked").set(False)
             st.success("Registrations unlocked. New players can now join.")
@@ -318,7 +318,7 @@ if admin_password == "admin123":
         st.info("✅ Registrations are OPEN. New players can join.")
         if st.button("🔒 Lock Registrations (stop new players)"):
             db.reference("job_registrations_locked").set(True)
-            st.success("Registrations locked. New players will not be able to join.")
+            st.success("Registrations locked. Existing players can continue, but new players cannot join.")
             st.rerun()
 
     st.subheader("🎲 Role Management")
@@ -578,11 +578,15 @@ This is a **job market signaling game** between two players:
 # Registration
 name = st.text_input("Enter your name to join the game:")
 if name:
-    # Check if registrations are locked
-    registrations_locked = db.reference("job_registrations_locked").get() or False
-    if registrations_locked:
-        st.error("❌ Registrations are currently locked by the admin. You cannot join at this time.")
-        st.stop()
+    # Check if this name is already registered
+    existing_player = db.reference(f"job_players/{name}").get()
+    
+    # If it's a new player, check if registrations are locked
+    if not existing_player:
+        registrations_locked = db.reference("job_registrations_locked").get() or False
+        if registrations_locked:
+            st.error("❌ Registrations are currently locked by the admin. New players cannot join.")
+            st.stop()
     
     st.success(f"👋 Welcome, {name}!")
     player_ref = db.reference(f"job_players/{name}")
