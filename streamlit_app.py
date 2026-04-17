@@ -306,6 +306,21 @@ if admin_password == "admin123":
         else:
             st.error("⚠ Number of players must be even (for pairing)")
 
+    st.subheader("🔒 Registration Control")
+    registrations_locked = db.reference("job_registrations_locked").get() or False
+    if registrations_locked:
+        st.warning("🚫 Registrations are currently LOCKED. New players cannot join.")
+        if st.button("🔓 Unlock Registrations"):
+            db.reference("job_registrations_locked").set(False)
+            st.success("Registrations unlocked. New players can now join.")
+            st.rerun()
+    else:
+        st.info("✅ Registrations are OPEN. New players can join.")
+        if st.button("🔒 Lock Registrations (stop new players)"):
+            db.reference("job_registrations_locked").set(True)
+            st.success("Registrations locked. New players will not be able to join.")
+            st.rerun()
+
     st.subheader("🎲 Role Management")
     if total_registered >= 2 and total_registered % 2 == 0:
         if st.button("👥 Assign Roles (randomly half Workers, half Firms)"):
@@ -327,6 +342,8 @@ if admin_password == "admin123":
             for pname in firm_names:
                 db.reference(f"job_players/{pname}").update({"role": "Firm"})
             db.reference("job_roles_assigned").set(True)
+            # Reset matching done flag
+            db.reference("job_matching_done").set(False)
             st.success(f"✅ Roles assigned: {len(worker_names)} Workers, {len(firm_names)} Firms")
             st.rerun()
     else:
@@ -339,11 +356,12 @@ if admin_password == "admin123":
             db.reference(f"job_players/{pname}/matched").delete()
         db.reference("job_roles_assigned").delete()
         db.reference("job_matches").delete()
+        db.reference("job_matching_done").set(False)
         st.success("Roles cleared. Click 'Assign Roles' again when ready.")
         st.rerun()
 
     if st.button("🤝 Start Matching (pair each Worker with a unique Firm)"):
-        # Clear existing matches
+        # Clear existing matches and matching flag
         db.reference("job_matches").delete()
         for pname in all_players.keys():
             db.reference(f"job_players/{pname}/matched").delete()
@@ -353,26 +371,28 @@ if admin_password == "admin123":
         workers = [p for p, data in all_players_data.items() if data.get("role") == "Worker"]
         firms = [p for p, data in all_players_data.items() if data.get("role") == "Firm"]
         
-        # Shuffle and pair
-        random.shuffle(workers)
-        random.shuffle(firms)
-        
-        # Ensure same length (should be equal)
-        pairs = list(zip(workers, firms))
-        
-        for worker, firm in pairs:
-            match_id = f"{worker}_vs_{firm}"
-            db.reference(f"job_matches/{match_id}").set({
-                "worker_player": worker,
-                "firm_player": firm,
-                "worker_ability": all_players_data[worker].get("ability"),
-                "timestamp": time.time()
-            })
-            db.reference(f"job_players/{worker}/matched").set(True)
-            db.reference(f"job_players/{firm}/matched").set(True)
-        
-        st.success(f"✅ Created {len(pairs)} unique pairs.")
-        st.rerun()
+        if len(workers) != len(firms):
+            st.error(f"Mismatch: {len(workers)} workers, {len(firms)} firms. Please reassign roles first.")
+        else:
+            # Shuffle and pair
+            random.shuffle(workers)
+            random.shuffle(firms)
+            pairs = list(zip(workers, firms))
+            
+            for worker, firm in pairs:
+                match_id = f"{worker}_vs_{firm}"
+                db.reference(f"job_matches/{match_id}").set({
+                    "worker_player": worker,
+                    "firm_player": firm,
+                    "worker_ability": all_players_data[worker].get("ability"),
+                    "timestamp": time.time()
+                })
+                db.reference(f"job_players/{worker}/matched").set(True)
+                db.reference(f"job_players/{firm}/matched").set(True)
+            
+            db.reference("job_matching_done").set(True)
+            st.success(f"✅ Created {len(pairs)} unique pairs. Players can now see their matches.")
+            st.rerun()
 
     st.subheader("🗂️ Data Management")
     col1, col2 = st.columns(2)
@@ -416,6 +436,8 @@ if admin_password == "admin123":
             db.reference("job_matches").delete()
             db.reference("job_expected_players").set(0)
             db.reference("job_roles_assigned").delete()
+            db.reference("job_matching_done").delete()
+            db.reference("job_registrations_locked").delete()
             st.success("🧹 ALL game data cleared!")
             st.rerun()
 
@@ -514,7 +536,9 @@ if admin_password == "admin123":
     st.stop()
 
 # -------------------- Game Logic --------------------
-if (db.reference("job_expected_players").get() or 0) <= 0:
+# Only show game interface if expected players > 0
+expected_players = db.reference("job_expected_players").get() or 0
+if expected_players <= 0:
     st.info("⚠️ Game not configured yet. Admin needs to set expected number of players.")
     st.stop()
 
@@ -554,6 +578,12 @@ This is a **job market signaling game** between two players:
 # Registration
 name = st.text_input("Enter your name to join the game:")
 if name:
+    # Check if registrations are locked
+    registrations_locked = db.reference("job_registrations_locked").get() or False
+    if registrations_locked:
+        st.error("❌ Registrations are currently locked by the admin. You cannot join at this time.")
+        st.stop()
+    
     st.success(f"👋 Welcome, {name}!")
     player_ref = db.reference(f"job_players/{name}")
     player_data = player_ref.get()
@@ -568,7 +598,7 @@ if name:
         time.sleep(3)
         st.rerun()
 
-    # Wait for matching to be done by admin (new flag)
+    # Wait for matching to be done by admin
     matching_done = db.reference("job_matching_done").get()
     if not matching_done:
         st.info("⏳ Waiting for admin to start matching... (Admin will pair players after roles are assigned.)")
