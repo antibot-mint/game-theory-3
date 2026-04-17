@@ -309,9 +309,13 @@ if admin_password == "admin123":
     st.subheader("🎲 Role Management")
     if total_registered >= 2 and total_registered % 2 == 0:
         if st.button("👥 Assign Roles (randomly half Workers, half Firms)"):
+            # Clear existing matches and matched flags
+            db.reference("job_matches").delete()
             for pname in all_players.keys():
                 db.reference(f"job_players/{pname}/role").delete()
                 db.reference(f"job_players/{pname}/ability").delete()
+                db.reference(f"job_players/{pname}/matched").delete()
+            # Assign new roles
             player_names = list(all_players.keys())
             random.shuffle(player_names)
             half = total_registered // 2
@@ -332,7 +336,9 @@ if admin_password == "admin123":
         for pname in all_players.keys():
             db.reference(f"job_players/{pname}/role").delete()
             db.reference(f"job_players/{pname}/ability").delete()
+            db.reference(f"job_players/{pname}/matched").delete()
         db.reference("job_roles_assigned").delete()
+        db.reference("job_matches").delete()
         st.success("Roles cleared. Click 'Assign Roles' again when ready.")
         st.rerun()
 
@@ -552,55 +558,67 @@ if name:
         st.error("Invalid role. Please ask admin to reassign roles.")
         st.stop()
 
-    # Matching
-    expected_players = db.reference("job_expected_players").get() or 0
+    # Matching with atomic checks (ensures one-to-one pairing)
     matches_ref = db.reference("job_matches")
     all_matches = matches_ref.get() or {}
     player_match_id = None
+    # First, check if this player is already in any match
     for match_id, match_data in all_matches.items():
         if name in [match_data.get("worker_player"), match_data.get("firm_player")]:
             player_match_id = match_id
             break
 
     if not player_match_id:
+        # Player not yet matched. Find an unmatched partner.
         all_job_players = db.reference("job_players").get() or {}
-        if role == "Worker":
-            unmatched_firm_players = []
-            for pname, pdata in all_job_players.items():
-                if pdata and pdata.get("role") == "Firm" and pname != name:
-                    already_matched = any(pname == m.get("firm_player") for m in all_matches.values())
-                    if not already_matched:
-                        unmatched_firm_players.append(pname)
-            if unmatched_firm_players:
-                firm_partner = unmatched_firm_players[0]
-                match_id = f"{name}_vs_{firm_partner}"
+        # Determine opposite role
+        opposite_role = "Firm" if role == "Worker" else "Worker"
+        
+        # Build set of players who are already in a match
+        matched_players = set()
+        for match_data in all_matches.values():
+            if "worker_player" in match_data:
+                matched_players.add(match_data["worker_player"])
+            if "firm_player" in match_data:
+                matched_players.add(match_data["firm_player"])
+        
+        eligible_partners = []
+        for pname, pdata in all_job_players.items():
+            if (pdata and pdata.get("role") == opposite_role and pname != name 
+                and pname not in matched_players):
+                eligible_partners.append(pname)
+        
+        if eligible_partners:
+            partner = random.choice(eligible_partners)
+            if role == "Worker":
+                match_id = f"{name}_vs_{partner}"
                 matches_ref.child(match_id).set({
                     "worker_player": name,
-                    "firm_player": firm_partner,
+                    "firm_player": partner,
                     "worker_ability": ability,
                     "timestamp": time.time()
                 })
+                # Mark both as matched (optional but helpful for future checks)
+                db.reference(f"job_players/{name}/matched").set(True)
+                db.reference(f"job_players/{partner}/matched").set(True)
                 player_match_id = match_id
-                st.success(f"🤝 You are matched with Firm: {firm_partner}!")
-        else:  # Firm
-            unmatched_worker_players = []
-            for pname, pdata in all_job_players.items():
-                if pdata and pdata.get("role") == "Worker" and pname != name:
-                    already_matched = any(pname == m.get("worker_player") for m in all_matches.values())
-                    if not already_matched:
-                        unmatched_worker_players.append(pname)
-            if unmatched_worker_players:
-                worker_partner = unmatched_worker_players[0]
-                worker_ability = all_job_players[worker_partner].get("ability")
-                match_id = f"{worker_partner}_vs_{name}"
+                st.success(f"🤝 You are matched with Firm: {partner}!")
+            else:  # Firm
+                match_id = f"{partner}_vs_{name}"
                 matches_ref.child(match_id).set({
-                    "worker_player": worker_partner,
+                    "worker_player": partner,
                     "firm_player": name,
-                    "worker_ability": worker_ability,
+                    "worker_ability": all_job_players[partner].get("ability"),
                     "timestamp": time.time()
                 })
+                db.reference(f"job_players/{name}/matched").set(True)
+                db.reference(f"job_players/{partner}/matched").set(True)
                 player_match_id = match_id
-                st.success(f"🤝 You are matched with Worker: {worker_partner}!")
+                st.success(f"🤝 You are matched with Worker: {partner}!")
+        else:
+            st.info("⏳ Waiting for a match partner...")
+            time.sleep(2)
+            st.rerun()
 
     if not player_match_id:
         st.info("⏳ Waiting for a match partner...")
@@ -762,7 +780,6 @@ if name:
                             st.metric("Low Ability Choose Effort", f"{low_effort_pct:.1f}%", "Theory: ~0%")
                         else:
                             st.metric("Low Ability Choose Effort", "N/A", "Theory: ~0%")
-                    # Removed the blue info bubble
 
 # Sidebar status
 st.sidebar.header("🎮 Game Status")
