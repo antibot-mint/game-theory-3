@@ -342,37 +342,37 @@ if admin_password == "admin123":
         st.success("Roles cleared. Click 'Assign Roles' again when ready.")
         st.rerun()
 
-    # New: Start Matching button (one-to-one pairing)
-    st.subheader("🔗 Matching")
-    if total_registered >= 2 and total_registered % 2 == 0:
-        workers = [name for name, data in all_players.items() if data.get("role") == "Worker"]
-        firms = [name for name, data in all_players.items() if data.get("role") == "Firm"]
-        if len(workers) == len(firms):
-            if st.button("🔗 Start Matching (one-to-one pairing)"):
-                # Clear old matches
-                db.reference("job_matches").delete()
-                # Randomly pair workers with firms
-                random.shuffle(workers)
-                random.shuffle(firms)
-                for i, worker in enumerate(workers):
-                    firm = firms[i]
-                    match_id = f"{worker}_vs_{firm}"
-                    ability = all_players[worker].get("ability")
-                    db.reference(f"job_matches/{match_id}").set({
-                        "worker_player": worker,
-                        "firm_player": firm,
-                        "worker_ability": ability,
-                        "timestamp": time.time()
-                    })
-                    # Mark as matched (optional)
-                    db.reference(f"job_players/{worker}/matched").set(True)
-                    db.reference(f"job_players/{firm}/matched").set(True)
-                st.success(f"✅ Created {len(workers)} matches.")
-                st.rerun()
-        else:
-            st.warning(f"Workers ({len(workers)}) and Firms ({len(firms)}) counts do not match. Please reassign roles first.")
-    else:
-        st.info("Need even number of players with roles assigned to start matching.")
+    if st.button("🤝 Start Matching (pair each Worker with a unique Firm)"):
+        # Clear existing matches
+        db.reference("job_matches").delete()
+        for pname in all_players.keys():
+            db.reference(f"job_players/{pname}/matched").delete()
+        
+        # Get all workers and firms
+        all_players_data = db.reference("job_players").get() or {}
+        workers = [p for p, data in all_players_data.items() if data.get("role") == "Worker"]
+        firms = [p for p, data in all_players_data.items() if data.get("role") == "Firm"]
+        
+        # Shuffle and pair
+        random.shuffle(workers)
+        random.shuffle(firms)
+        
+        # Ensure same length (should be equal)
+        pairs = list(zip(workers, firms))
+        
+        for worker, firm in pairs:
+            match_id = f"{worker}_vs_{firm}"
+            db.reference(f"job_matches/{match_id}").set({
+                "worker_player": worker,
+                "firm_player": firm,
+                "worker_ability": all_players_data[worker].get("ability"),
+                "timestamp": time.time()
+            })
+            db.reference(f"job_players/{worker}/matched").set(True)
+            db.reference(f"job_players/{firm}/matched").set(True)
+        
+        st.success(f"✅ Created {len(pairs)} unique pairs.")
+        st.rerun()
 
     st.subheader("🗂️ Data Management")
     col1, col2 = st.columns(2)
@@ -564,11 +564,18 @@ if name:
     # Check if roles have been assigned by the admin
     roles_assigned = db.reference("job_roles_assigned").get()
     if not roles_assigned:
-        st.info("⏳ Waiting for admin to assign roles...")
+        st.info("⏳ Waiting for admin to assign roles... (The game will start automatically once roles are assigned.)")
         time.sleep(3)
         st.rerun()
 
-    # Get player role
+    # Wait for matching to be done by admin (new flag)
+    matching_done = db.reference("job_matching_done").get()
+    if not matching_done:
+        st.info("⏳ Waiting for admin to start matching... (Admin will pair players after roles are assigned.)")
+        time.sleep(3)
+        st.rerun()
+
+    # Roles are assigned – get the player's role
     player_info = player_ref.get()
     if not player_info or "role" not in player_info:
         st.error("Role not found. Please ask the admin to reassign roles.")
@@ -590,7 +597,7 @@ if name:
         st.error("Invalid role. Please ask admin to reassign roles.")
         st.stop()
 
-    # Wait for matches to be created by admin
+    # Get the match for this player
     matches_ref = db.reference("job_matches")
     all_matches = matches_ref.get() or {}
     player_match_id = None
@@ -600,11 +607,11 @@ if name:
             break
 
     if not player_match_id:
-        st.info("⏳ Waiting for admin to start matching... (Click 'Start Matching' in admin panel)")
-        time.sleep(3)
+        st.info("⏳ Waiting for admin to start matching...")
+        time.sleep(2)
         st.rerun()
 
-    # Gameplay (same as before)
+    # Gameplay
     match_ref = matches_ref.child(player_match_id)
     match_data = match_ref.get()
 
@@ -648,6 +655,7 @@ if name:
 
     elif role == "Firm":
         st.subheader("🏢 Step 4: Firm's Response - Choose Job Offer")
+        # Force refresh of match_data each time
         match_data = match_ref.get()
         
         if "worker_choice" not in match_data:
@@ -721,43 +729,42 @@ if name:
             st.balloons()
             st.success("✅ Your match is complete! Thank you for playing.")
 
-            # Show summary for Firm participants
-            if role == "Firm":
-                st.header("📊 Step 6: Summary Analysis - Class Results vs Game Theory")
-                all_matches = db.reference("job_matches").get() or {}
-                completed_results = []
-                for match_data in all_matches.values():
-                    if "worker_choice" in match_data:
-                        completed_results.append({
-                            "ability": match_data["worker_ability"],
-                            "choice": match_data["worker_choice"],
-                            "firm_choice": match_data.get("firm_choice", None)
-                        })
-                if len(completed_results) >= 1:
-                    high_choices = [r["choice"] for r in completed_results if r["ability"] == "High"]
-                    low_choices = [r["choice"] for r in completed_results if r["ability"] == "Low"]
-                    effort_responses = [r["firm_choice"] for r in completed_results if r["choice"] == "Effort" and r["firm_choice"]]
-                    
-                    st.subheader("🧮 Theory vs Your Class Results")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        if effort_responses:
-                            manager_pct = len([r for r in effort_responses if r == "Manager"]) / len(effort_responses) * 100
-                            st.metric("Firm Offers Manager", f"{manager_pct:.1f}%", "Theory: ~67%")
-                        else:
-                            st.metric("Firm Offers Manager", "N/A", "Theory: ~67%")
-                    with col2:
-                        if high_choices:
-                            high_effort_pct = len([c for c in high_choices if c == "Effort"]) / len(high_choices) * 100
-                            st.metric("High Ability Choose Effort", f"{high_effort_pct:.1f}%", "Theory: ~100%")
-                        else:
-                            st.metric("High Ability Choose Effort", "N/A", "Theory: ~100%")
-                    with col3:
-                        if low_choices:
-                            low_effort_pct = len([c for c in low_choices if c == "Effort"]) / len(low_choices) * 100
-                            st.metric("Low Ability Choose Effort", f"{low_effort_pct:.1f}%", "Theory: ~0%")
-                        else:
-                            st.metric("Low Ability Choose Effort", "N/A", "Theory: ~0%")
+            # --- Step 6: Summary Analysis for ALL players (both Workers and Firms) ---
+            st.header("📊 Step 6: Summary Analysis - Class Results vs Game Theory")
+            all_matches = db.reference("job_matches").get() or {}
+            completed_results = []
+            for match_data in all_matches.values():
+                if "worker_choice" in match_data:
+                    completed_results.append({
+                        "ability": match_data["worker_ability"],
+                        "choice": match_data["worker_choice"],
+                        "firm_choice": match_data.get("firm_choice", None)
+                    })
+            if len(completed_results) >= 1:
+                high_choices = [r["choice"] for r in completed_results if r["ability"] == "High"]
+                low_choices = [r["choice"] for r in completed_results if r["ability"] == "Low"]
+                effort_responses = [r["firm_choice"] for r in completed_results if r["choice"] == "Effort" and r["firm_choice"]]
+                
+                st.subheader("🧮 Theory vs Your Class Results")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    if effort_responses:
+                        manager_pct = len([r for r in effort_responses if r == "Manager"]) / len(effort_responses) * 100
+                        st.metric("Firm Offers Manager", f"{manager_pct:.1f}%", "Theory: ~67%")
+                    else:
+                        st.metric("Firm Offers Manager", "N/A", "Theory: ~67%")
+                with col2:
+                    if high_choices:
+                        high_effort_pct = len([c for c in high_choices if c == "Effort"]) / len(high_choices) * 100
+                        st.metric("High Ability Choose Effort", f"{high_effort_pct:.1f}%", "Theory: ~100%")
+                    else:
+                        st.metric("High Ability Choose Effort", "N/A", "Theory: ~100%")
+                with col3:
+                    if low_choices:
+                        low_effort_pct = len([c for c in low_choices if c == "Effort"]) / len(low_choices) * 100
+                        st.metric("Low Ability Choose Effort", f"{low_effort_pct:.1f}%", "Theory: ~0%")
+                    else:
+                        st.metric("Low Ability Choose Effort", "N/A", "Theory: ~0%")
 
 # Sidebar status
 st.sidebar.header("🎮 Game Status")
