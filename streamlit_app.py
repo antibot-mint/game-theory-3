@@ -342,6 +342,38 @@ if admin_password == "admin123":
         st.success("Roles cleared. Click 'Assign Roles' again when ready.")
         st.rerun()
 
+    # New: Start Matching button (one-to-one pairing)
+    st.subheader("🔗 Matching")
+    if total_registered >= 2 and total_registered % 2 == 0:
+        workers = [name for name, data in all_players.items() if data.get("role") == "Worker"]
+        firms = [name for name, data in all_players.items() if data.get("role") == "Firm"]
+        if len(workers) == len(firms):
+            if st.button("🔗 Start Matching (one-to-one pairing)"):
+                # Clear old matches
+                db.reference("job_matches").delete()
+                # Randomly pair workers with firms
+                random.shuffle(workers)
+                random.shuffle(firms)
+                for i, worker in enumerate(workers):
+                    firm = firms[i]
+                    match_id = f"{worker}_vs_{firm}"
+                    ability = all_players[worker].get("ability")
+                    db.reference(f"job_matches/{match_id}").set({
+                        "worker_player": worker,
+                        "firm_player": firm,
+                        "worker_ability": ability,
+                        "timestamp": time.time()
+                    })
+                    # Mark as matched (optional)
+                    db.reference(f"job_players/{worker}/matched").set(True)
+                    db.reference(f"job_players/{firm}/matched").set(True)
+                st.success(f"✅ Created {len(workers)} matches.")
+                st.rerun()
+        else:
+            st.warning(f"Workers ({len(workers)}) and Firms ({len(firms)}) counts do not match. Please reassign roles first.")
+    else:
+        st.info("Need even number of players with roles assigned to start matching.")
+
     st.subheader("🗂️ Data Management")
     col1, col2 = st.columns(2)
     with col1:
@@ -532,11 +564,11 @@ if name:
     # Check if roles have been assigned by the admin
     roles_assigned = db.reference("job_roles_assigned").get()
     if not roles_assigned:
-        st.info("⏳ Waiting for admin to assign roles... (The game will start automatically once roles are assigned.)")
+        st.info("⏳ Waiting for admin to assign roles...")
         time.sleep(3)
         st.rerun()
 
-    # Roles are assigned – get the player's role
+    # Get player role
     player_info = player_ref.get()
     if not player_info or "role" not in player_info:
         st.error("Role not found. Please ask the admin to reassign roles.")
@@ -558,74 +590,21 @@ if name:
         st.error("Invalid role. Please ask admin to reassign roles.")
         st.stop()
 
-    # Matching with atomic checks (ensures one-to-one pairing)
+    # Wait for matches to be created by admin
     matches_ref = db.reference("job_matches")
     all_matches = matches_ref.get() or {}
     player_match_id = None
-    # First, check if this player is already in any match
     for match_id, match_data in all_matches.items():
         if name in [match_data.get("worker_player"), match_data.get("firm_player")]:
             player_match_id = match_id
             break
 
     if not player_match_id:
-        # Player not yet matched. Find an unmatched partner.
-        all_job_players = db.reference("job_players").get() or {}
-        # Determine opposite role
-        opposite_role = "Firm" if role == "Worker" else "Worker"
-        
-        # Build set of players who are already in a match
-        matched_players = set()
-        for match_data in all_matches.values():
-            if "worker_player" in match_data:
-                matched_players.add(match_data["worker_player"])
-            if "firm_player" in match_data:
-                matched_players.add(match_data["firm_player"])
-        
-        eligible_partners = []
-        for pname, pdata in all_job_players.items():
-            if (pdata and pdata.get("role") == opposite_role and pname != name 
-                and pname not in matched_players):
-                eligible_partners.append(pname)
-        
-        if eligible_partners:
-            partner = random.choice(eligible_partners)
-            if role == "Worker":
-                match_id = f"{name}_vs_{partner}"
-                matches_ref.child(match_id).set({
-                    "worker_player": name,
-                    "firm_player": partner,
-                    "worker_ability": ability,
-                    "timestamp": time.time()
-                })
-                # Mark both as matched (optional but helpful for future checks)
-                db.reference(f"job_players/{name}/matched").set(True)
-                db.reference(f"job_players/{partner}/matched").set(True)
-                player_match_id = match_id
-                st.success(f"🤝 You are matched with Firm: {partner}!")
-            else:  # Firm
-                match_id = f"{partner}_vs_{name}"
-                matches_ref.child(match_id).set({
-                    "worker_player": partner,
-                    "firm_player": name,
-                    "worker_ability": all_job_players[partner].get("ability"),
-                    "timestamp": time.time()
-                })
-                db.reference(f"job_players/{name}/matched").set(True)
-                db.reference(f"job_players/{partner}/matched").set(True)
-                player_match_id = match_id
-                st.success(f"🤝 You are matched with Worker: {partner}!")
-        else:
-            st.info("⏳ Waiting for a match partner...")
-            time.sleep(2)
-            st.rerun()
-
-    if not player_match_id:
-        st.info("⏳ Waiting for a match partner...")
-        time.sleep(2)
+        st.info("⏳ Waiting for admin to start matching... (Click 'Start Matching' in admin panel)")
+        time.sleep(3)
         st.rerun()
 
-    # Gameplay
+    # Gameplay (same as before)
     match_ref = matches_ref.child(player_match_id)
     match_data = match_ref.get()
 
@@ -669,7 +648,6 @@ if name:
 
     elif role == "Firm":
         st.subheader("🏢 Step 4: Firm's Response - Choose Job Offer")
-        # Force refresh of match_data each time
         match_data = match_ref.get()
         
         if "worker_choice" not in match_data:
@@ -743,7 +721,7 @@ if name:
             st.balloons()
             st.success("✅ Your match is complete! Thank you for playing.")
 
-            # Show summary for Firm participants - only Theory vs Your Class Results (no charts, no extra bubble)
+            # Show summary for Firm participants
             if role == "Firm":
                 st.header("📊 Step 6: Summary Analysis - Class Results vs Game Theory")
                 all_matches = db.reference("job_matches").get() or {}
