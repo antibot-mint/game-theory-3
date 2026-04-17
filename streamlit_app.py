@@ -317,7 +317,6 @@ if admin_password == "admin123":
     else:
         if total_registered >= expected_players and expected_players > 0:
             st.warning(f"⚠️ Registered players ({total_registered}) have reached or exceeded expected players ({expected_players}). New registrations will be blocked automatically.")
-            # Set the flag so new players see the lock
             db.reference("job_registrations_full").set(True)
             st.rerun()
         else:
@@ -777,6 +776,8 @@ if name:
 
             # --- Step 6: Summary Analysis for ALL players (both Workers and Firms) ---
             st.header("📊 Step 6: Summary Analysis - Class Results vs Game Theory")
+            
+            # Fetch latest data from Firebase
             all_matches = db.reference("job_matches").get() or {}
             completed_results = []
             for match_data in all_matches.values():
@@ -786,6 +787,7 @@ if name:
                         "choice": match_data["worker_choice"],
                         "firm_choice": match_data.get("firm_choice", None)
                     })
+            
             if len(completed_results) >= 1:
                 high_choices = [r["choice"] for r in completed_results if r["ability"] == "High"]
                 low_choices = [r["choice"] for r in completed_results if r["ability"] == "Low"]
@@ -811,6 +813,12 @@ if name:
                         st.metric("Low Ability Choose Effort", f"{low_effort_pct:.1f}%", "Theory: ~0%")
                     else:
                         st.metric("Low Ability Choose Effort", "N/A", "Theory: ~0%")
+                
+                # Add refresh button to update results without full page reload
+                if st.button("🔄 Refresh Results"):
+                    st.rerun()
+            else:
+                st.info("Waiting for more matches to complete before showing class results...")
 
 # Sidebar status
 st.sidebar.header("🎮 Game Status")
