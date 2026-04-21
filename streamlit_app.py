@@ -182,8 +182,8 @@ def create_pdf_report():
     os.unlink(temp_file.name)
     return pdf_content
 
-def export_payoffs_excel():
-    """Export all completed matches to an Excel file (in memory) using xlsxwriter engine"""
+def export_payoffs_csv():
+    """Export all completed matches to a CSV string"""
     all_matches = db.reference("job_matches").get() or {}
     rows = []
     for match_id, match_data in all_matches.items():
@@ -215,10 +215,7 @@ def export_payoffs_excel():
                 "Firm Payoff": firm_payoff
             })
     df = pd.DataFrame(rows)
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='Game Results')
-    return output.getvalue()
+    return df.to_csv(index=False)
 
 # -------------------- Admin Panel --------------------
 admin_password = st.text_input("Admin Password:", type="password")
@@ -440,34 +437,15 @@ if admin_password == "admin123":
                         st.success("✅ PDF report generated successfully!")
                     except Exception as e:
                         st.error(f"Error generating PDF: {str(e)}")
-                        results_data = []
-                        for match_id, match_data in all_matches.items():
-                            if "worker_choice" in match_data:
-                                ability = match_data["worker_ability"]
-                                worker_choice = match_data["worker_choice"]
-                                firm_choice = match_data.get("firm_choice", None)
-                                if worker_choice == "No Effort":
-                                    worker_payoff, firm_payoff = 4, 4
-                                else:
-                                    if ability == "High":
-                                        if firm_choice == "Manager":
-                                            worker_payoff, firm_payoff = 6, 10
-                                        else:
-                                            worker_payoff, firm_payoff = 0, 4
-                                    else:
-                                        if firm_choice == "Manager":
-                                            worker_payoff, firm_payoff = 3, 0
-                                        else:
-                                            worker_payoff, firm_payoff = -3, 4
-                                results_data.append({"Match_ID": match_id, "Worker_Player": match_data["worker_player"], "Firm_Player": match_data["firm_player"], "Worker_Ability": ability, "Worker_Choice": worker_choice, "Firm_Choice": firm_choice if firm_choice else "N/A", "Worker_Payoff": worker_payoff, "Firm_Payoff": firm_payoff})
-                        df = pd.DataFrame(results_data)
-                        st.download_button(label="📥 Download CSV (Fallback)", data=df.to_csv(index=False), file_name="job_market_game_results.csv", mime="text/csv")
+                        # Fallback to CSV if PDF fails
+                        csv_data = export_payoffs_csv()
+                        st.download_button(label="📥 Download CSV (Fallback)", data=csv_data, file_name="job_market_game_results.csv", mime="text/csv")
             else:
                 st.warning("No completed matches to export.")
-        if st.button("📊 Export Payoffs to Excel"):
+        if st.button("📊 Export Payoffs to CSV"):
             if completed_matches > 0:
-                excel_data = export_payoffs_excel()
-                st.download_button(label="📥 Download Excel File", data=excel_data, file_name="job_market_payoffs.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                csv_data = export_payoffs_csv()
+                st.download_button(label="📥 Download CSV File", data=csv_data, file_name="job_market_payoffs.csv", mime="text/csv")
             else:
                 st.warning("No completed matches to export.")
     with col2:
