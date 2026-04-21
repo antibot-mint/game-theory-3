@@ -183,7 +183,7 @@ def create_pdf_report():
     return pdf_content
 
 def export_payoffs_excel():
-    """Export all completed matches to an Excel file (in memory)"""
+    """Export all completed matches to an Excel file (in memory) using xlsxwriter engine"""
     all_matches = db.reference("job_matches").get() or {}
     rows = []
     for match_id, match_data in all_matches.items():
@@ -216,7 +216,7 @@ def export_payoffs_excel():
             })
     df = pd.DataFrame(rows)
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Game Results')
     return output.getvalue()
 
