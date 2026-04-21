@@ -78,7 +78,7 @@ def create_pdf_report():
                 ability = match_data["worker_ability"]
                 worker_choice = match_data["worker_choice"]
                 firm_choice = match_data.get("firm_choice", None)
-                if worker_choice == "No Effort":
+                if worker_choice == "No Education":
                     worker_payoff, firm_payoff = 4, 4
                 else:
                     if ability == "High":
@@ -109,7 +109,7 @@ def create_pdf_report():
             abilities = [r["Worker_Ability"] for r in results_data]
             choice_counts = pd.Series(worker_choices).value_counts(normalize=True) * 100
             ax1.bar(choice_counts.index, choice_counts.values, color=['#e74c3c', '#3498db'], alpha=0.8)
-            ax1.set_title('Worker Effort Choices', fontweight='bold')
+            ax1.set_title('Worker Education Choices', fontweight='bold')
             ax1.set_ylabel('Percentage (%)')
             ax1.set_ylim(0, 100)
             for i, v in enumerate(choice_counts.values):
@@ -118,14 +118,14 @@ def create_pdf_report():
             if firm_choices:
                 firm_counts = pd.Series(firm_choices).value_counts(normalize=True) * 100
                 ax2.bar(firm_counts.index, firm_counts.values, color=['#3498db', '#e74c3c'], alpha=0.8)
-                ax2.set_title('Firm Job Offers (after Effort)', fontweight='bold')
+                ax2.set_title('Firm Job Offers (after Education)', fontweight='bold')
                 ax2.set_ylabel('Percentage (%)')
                 ax2.set_ylim(0, 100)
                 for i, v in enumerate(firm_counts.values):
                     ax2.text(i, v + 1, f'{v:.1f}%', ha='center', fontweight='bold')
                 ax2.grid(True, alpha=0.3)
             else:
-                ax2.text(0.5, 0.5, 'No Effort choices made yet', ha='center', va='center')
+                ax2.text(0.5, 0.5, 'No Education choices made yet', ha='center', va='center')
             ability_counts = pd.Series(abilities).value_counts(normalize=True) * 100
             ax3.bar(ability_counts.index, ability_counts.values, color=['#e74c3c', '#2ecc71'], alpha=0.8)
             ax3.set_title('Worker Ability Distribution', fontweight='bold')
@@ -136,9 +136,9 @@ def create_pdf_report():
             ax3.grid(True, alpha=0.3)
             strategies = []
             for r in results_data:
-                if r["Worker_Ability"] == "Low" and r["Worker_Choice"] == "No Effort":
+                if r["Worker_Ability"] == "Low" and r["Worker_Choice"] == "No Education":
                     strategies.append("Separating")
-                elif r["Worker_Ability"] == "High" and r["Worker_Choice"] == "Effort":
+                elif r["Worker_Ability"] == "High" and r["Worker_Choice"] == "Education":
                     strategies.append("Separating")
                 else:
                     strategies.append("Pooling")
@@ -191,7 +191,7 @@ def export_payoffs_csv():
             ability = match_data["worker_ability"]
             worker_choice = match_data["worker_choice"]
             firm_choice = match_data.get("firm_choice", None)
-            if worker_choice == "No Effort":
+            if worker_choice == "No Education":
                 worker_payoff, firm_payoff = 4, 4
             else:
                 if ability == "High":
@@ -239,7 +239,7 @@ if admin_password == "admin123":
     completed_matches = 0
     for match_data in all_matches.values():
         if match_data and "worker_choice" in match_data:
-            if match_data["worker_choice"] == "No Effort" or "firm_choice" in match_data:
+            if match_data["worker_choice"] == "No Education" or "firm_choice" in match_data:
                 completed_matches += 1
 
     col1, col2, col3, col4 = st.columns(4)
@@ -275,19 +275,19 @@ if admin_password == "admin123":
                         activity = f"Chose: {player_match['worker_choice']}"
                     else:
                         status = "🟡 In Match"
-                        activity = "Making effort decision..."
+                        activity = "Making Education decision..."
                 elif role == "Firm":
                     paired_with = player_match.get("worker_player", "Unknown")
                     if "worker_choice" in player_match:
-                        if player_match["worker_choice"] == "No Effort":
+                        if player_match["worker_choice"] == "No Education":
                             status = "🟢 Completed"
-                            activity = "No effort → game ended"
+                            activity = "No Education → game ended"
                         elif "firm_choice" in player_match:
                             status = "🟢 Completed"
                             activity = f"Offered: {player_match['firm_choice']}"
                         else:
                             status = "🟡 In Match"
-                            activity = "Waiting for worker effort..."
+                            activity = "Waiting for worker Education..."
                     else:
                         status = "🟡 In Match"
                         activity = "Waiting for worker..."
@@ -311,21 +311,21 @@ if admin_password == "admin123":
             if match_data and "worker_choice" in match_data:
                 worker_choices.append(match_data["worker_choice"])
                 abilities.append(match_data["worker_ability"])
-                if match_data["worker_choice"] == "Effort" and "firm_choice" in match_data:
+                if match_data["worker_choice"] == "Education" and "firm_choice" in match_data:
                     firm_choices.append(match_data["firm_choice"])
         col1, col2 = st.columns(2)
         with col1:
-            plot_enhanced_percentage_bar(worker_choices, ["Effort", "No Effort"], "Worker Effort Choices", "Worker")
+            plot_enhanced_percentage_bar(worker_choices, ["Education", "No Education"], "Worker Education Choices", "Worker")
             plot_enhanced_percentage_bar(abilities, ["High", "Low"], "Worker Ability Distribution", "Worker")
         with col2:
             if firm_choices:
-                plot_enhanced_percentage_bar(firm_choices, ["Manager", "Clerk"], "Firm Job Offers (after Effort)", "Firm")
+                plot_enhanced_percentage_bar(firm_choices, ["Manager", "Clerk"], "Firm Job Offers (after Education)", "Firm")
             strategies = []
             for match_data in all_matches.values():
                 if match_data and "worker_choice" in match_data:
                     ability = match_data["worker_ability"]
                     choice = match_data["worker_choice"]
-                    if (ability == "Low" and choice == "No Effort") or (ability == "High" and choice == "Effort"):
+                    if (ability == "Low" and choice == "No Education") or (ability == "High" and choice == "Education"):
                         strategies.append("Separating")
                     else:
                         strategies.append("Pooling")
@@ -465,30 +465,30 @@ if admin_password == "admin123":
     elif completed_matches >= (expected_players // 2) and expected_players > 0:
         st.success("🎉 All matches completed! Game finished.")
         st.header("📊 Admin View: Summary Analysis - Class Results vs Game Theory")
-        high_effort = []
-        low_effort = []
-        effort_responses = []
+        high_Education = []
+        low_Education = []
+        Education_responses = []
         for match_data in all_matches.values():
             if match_data and "worker_choice" in match_data:
                 ability = match_data["worker_ability"]
                 choice = match_data["worker_choice"]
                 if ability == "High":
-                    high_effort.append(choice)
+                    high_Education.append(choice)
                 else:
-                    low_effort.append(choice)
-                if choice == "Effort" and "firm_choice" in match_data:
-                    effort_responses.append(match_data["firm_choice"])
+                    low_Education.append(choice)
+                if choice == "Education" and "firm_choice" in match_data:
+                    Education_responses.append(match_data["firm_choice"])
         st.subheader("🎯 Key Strategic Analysis")
         col1, col2 = st.columns(2)
         with col1:
-            if high_effort and low_effort:
-                high_effort_pct = len([c for c in high_effort if c == "Effort"]) / len(high_effort) * 100
-                low_effort_pct = len([c for c in low_effort if c == "Effort"]) / len(low_effort) * 100
+            if high_Education and low_Education:
+                high_Education_pct = len([c for c in high_Education if c == "Education"]) / len(high_Education) * 100
+                low_Education_pct = len([c for c in low_Education if c == "Education"]) / len(low_Education) * 100
                 fig, ax = plt.subplots(figsize=(8, 5))
                 categories = ['High Ability', 'Low Ability']
-                percentages = [high_effort_pct, low_effort_pct]
+                percentages = [high_Education_pct, low_Education_pct]
                 bars = ax.bar(categories, percentages, color=['#e74c3c', '#2ecc71'], alpha=0.8)
-                ax.set_title("% Choosing Effort by Worker Ability", fontsize=14, fontweight='bold')
+                ax.set_title("% Choosing Education by Worker Ability", fontsize=14, fontweight='bold')
                 ax.set_ylabel("Percentage (%)")
                 ax.set_ylim(0, 100)
                 for bar, pct in zip(bars, percentages):
@@ -499,14 +499,14 @@ if admin_password == "admin123":
             else:
                 st.info("Need both high and low ability workers to show this analysis")
         with col2:
-            if effort_responses:
-                manager_pct = len([r for r in effort_responses if r == "Manager"]) / len(effort_responses) * 100
+            if Education_responses:
+                manager_pct = len([r for r in Education_responses if r == "Manager"]) / len(Education_responses) * 100
                 fig, ax = plt.subplots(figsize=(8, 5))
-                manager_count = len([r for r in effort_responses if r == "Manager"])
-                clerk_count = len([r for r in effort_responses if r == "Clerk"])
-                percentages_vals = [manager_count/len(effort_responses)*100, clerk_count/len(effort_responses)*100]
+                manager_count = len([r for r in Education_responses if r == "Manager"])
+                clerk_count = len([r for r in Education_responses if r == "Clerk"])
+                percentages_vals = [manager_count/len(Education_responses)*100, clerk_count/len(Education_responses)*100]
                 bars = ax.bar(['Manager', 'Clerk'], percentages_vals, color=['#3498db', '#e74c3c'], alpha=0.8)
-                ax.set_title("Firm Job Offers (after Effort)", fontsize=14, fontweight='bold')
+                ax.set_title("Firm Job Offers (after Education)", fontsize=14, fontweight='bold')
                 ax.set_ylabel("Percentage (%)")
                 ax.set_ylim(0, 100)
                 for bar, pct in zip(bars, percentages_vals):
@@ -515,27 +515,27 @@ if admin_password == "admin123":
                 plt.tight_layout()
                 st.pyplot(fig)
             else:
-                st.info("No effort choices made yet")
+                st.info("No Education choices made yet")
         st.subheader("🧮 Game Theory Predictions vs Your Class")
         col1, col2, col3 = st.columns(3)
         with col1:
-            if effort_responses:
-                manager_pct = len([r for r in effort_responses if r == "Manager"]) / len(effort_responses) * 100
-                st.metric("Firm Offers Manager (after Effort)", f"{manager_pct:.1f}%")
+            if Education_responses:
+                manager_pct = len([r for r in Education_responses if r == "Manager"]) / len(Education_responses) * 100
+                st.metric("Firm Offers Manager (after Education)", f"{manager_pct:.1f}%")
             else:
                 st.metric("Firm Offers Manager", "N/A")
         with col2:
-            if high_effort:
-                high_effort_pct = len([c for c in high_effort if c == "Effort"]) / len(high_effort) * 100
-                st.metric("High Ability Choose Effort", f"{high_effort_pct:.1f}%")
+            if high_Education:
+                high_Education_pct = len([c for c in high_Education if c == "Education"]) / len(high_Education) * 100
+                st.metric("High Ability Choose Education", f"{high_Education_pct:.1f}%")
             else:
-                st.metric("High Ability Choose Effort", "N/A")
+                st.metric("High Ability Choose Education", "N/A")
         with col3:
-            if low_effort:
-                low_effort_pct = len([c for c in low_effort if c == "Effort"]) / len(low_effort) * 100
-                st.metric("Low Ability Choose Effort", f"{low_effort_pct:.1f}%")
+            if low_Education:
+                low_Education_pct = len([c for c in low_Education if c == "Education"]) / len(low_Education) * 100
+                st.metric("Low Ability Choose Education", f"{low_Education_pct:.1f}%")
             else:
-                st.metric("Low Ability Choose Effort", "N/A")
+                st.metric("Low Ability Choose Education", "N/A")
         st.success("🎉 **Job Market Signaling Game Complete!**")
         if st.button("🔄 Manual Refresh"):
             st.rerun()
@@ -554,31 +554,31 @@ st.header("📖 Simple Explanation of the Game")
 st.markdown("""
 This is a **job market signaling game** between two players:
 
-👩‍💼 **Worker** (the sender of the signal/effort)  
+👩‍💼 **Worker** (the sender of the signal/education)  
 🏢 **Firm** (the receiver, who decides which job to offer)
 
 ### 🎯 What's happening?
 1. **Nature decides** the worker's ability: **High (33.3%)** or **Low (66.7%)**
-2. **Worker chooses** to put in **Effort** (e.g., education, certification) or **No Effort**
-3. **If worker chooses No Effort** → Game ends with payoffs (4,4)
-4. **If worker chooses Effort** → Firm decides: **Manager** or **Clerk**
+2. **Worker chooses** between **Education** or **No Education**
+3. **If worker chooses No Education** → Game ends with payoffs (4,4)
+4. **If worker chooses Education** → Firm decides: **Manager** or **Clerk**
 
 ### 💰 Payoff Matrix (Worker, Firm):
 **High Ability (33.3%):**  
-- Effort → Manager: (6, 10)  
-- Effort → Clerk: (0, 4)  
-- No Effort: (4, 4)
+- Education → Manager: (6, 10)  
+- Education → Clerk: (0, 4)  
+- No Education: (4, 4)
 
 **Low Ability (66.7%):**  
-- Effort → Manager: (3, 0)  
-- Effort → Clerk: (-3, 4)  
-- No Effort: (4, 4)
+- Education → Manager: (3, 0)  
+- Education → Clerk: (-3, 4)  
+- No Education: (4, 4)
 
 ### 🎮 Game Steps:
 **Step 1**: Player Registration  
 **Step 2**: Random Nature Draw (ability hidden from Firm)  
-**Step 3**: Worker's Move (Effort or No Effort)  
-**Step 4**: Firm's Response (Manager or Clerk, if Effort)  
+**Step 3**: Worker's Move (Education or No Education)  
+**Step 4**: Firm's Response (Manager or Clerk, if Education)  
 **Step 5**: Show Results  
 **Step 6**: Summary Analysis
 """)
@@ -663,40 +663,40 @@ if name:
     match_data = match_ref.get()
 
     if role == "Worker":
-        st.subheader("💪 Step 3: Worker's Move - Choose Effort Level")
+        st.subheader("💪 Step 3: Worker's Move - Choose Education Level")
         if "worker_choice" not in match_data:
             ability = match_data["worker_ability"]
             st.write(f"**Reminder**: Your ability is {ability}")
             if ability == "High":
                 st.info("""
-**If you choose Effort**, the Firm will then decide whether to offer you a Manager or Clerk position.
+**If you choose Education**, the Firm will then decide whether to offer you a Manager or Clerk position.
 
 - Manager → You get 6, Firm gets 10
 - Clerk → You get 0, Firm gets 4
 
-**If you choose No Effort**, the game ends immediately with payoffs (4 for you, 4 for the Firm).
+**If you choose No Education**, the game ends immediately with payoffs (4 for you, 4 for the Firm).
 """)
             else:
                 st.info("""
-**If you choose Effort**, the Firm will then decide whether to offer you a Manager or Clerk position.
+**If you choose Education**, the Firm will then decide whether to offer you a Manager or Clerk position.
 
 - Manager → You get 3, Firm gets 0
 - Clerk → You get -3, Firm gets 4
 
-**If you choose No Effort**, the game ends immediately with payoffs (4 for you, 4 for the Firm).
+**If you choose No Education**, the game ends immediately with payoffs (4 for you, 4 for the Firm).
 """)
-            worker_choice = st.radio("Choose your action:", ["Effort", "No Effort"])
+            worker_choice = st.radio("Choose your action:", ["Education", "No Education"])
             if st.button("Submit Choice"):
                 match_ref.update({"worker_choice": worker_choice, "worker_timestamp": time.time()})
                 st.success(f"✅ You chose: {worker_choice}")
                 st.rerun()
         else:
             st.success(f"✅ You already submitted: {match_data['worker_choice']}")
-            if match_data['worker_choice'] == "No Effort":
+            if match_data['worker_choice'] == "No Education":
                 st.info("⏳ Game complete. Waiting for results...")
             else:
                 st.info("⏳ Waiting for Firm's response...")
-            if match_data['worker_choice'] != "No Effort" and "firm_choice" not in match_data:
+            if match_data['worker_choice'] != "No Education" and "firm_choice" not in match_data:
                 time.sleep(2)
                 st.rerun()
 
@@ -704,11 +704,11 @@ if name:
         st.subheader("🏢 Step 4: Firm's Response - Choose Job Offer")
         match_data = match_ref.get()
         if "worker_choice" not in match_data:
-            st.info("⏳ Waiting for Worker to make an effort decision...")
+            st.info("⏳ Waiting for Worker to make an Education decision...")
             time.sleep(2)
             st.rerun()
-        elif match_data["worker_choice"] == "No Effort":
-            st.info("📢 The worker chose **No Effort**. The game ends with payoffs (4,4). No further decision needed.")
+        elif match_data["worker_choice"] == "No Education":
+            st.info("📢 The worker chose **No Education**. The game ends with payoffs (4,4). No further decision needed.")
             if "firm_choice" not in match_data:
                 match_ref.update({"firm_choice": "No Decision Needed", "firm_timestamp": time.time()})
                 st.rerun()
@@ -727,7 +727,7 @@ if name:
     # Show results when complete
     if "worker_choice" in match_data:
         worker_choice = match_data["worker_choice"]
-        if worker_choice == "No Effort" or "firm_choice" in match_data:
+        if worker_choice == "No Education" or "firm_choice" in match_data:
             st.header("🎯 Step 5: Results - The Truth is Revealed!")
             worker_player = match_data["worker_player"]
             firm_player = match_data["firm_player"]
@@ -738,8 +738,8 @@ if name:
             col1, col2, col3 = st.columns(3)
             with col1: st.info(f"**Worker's Ability**\n{ability}")
             with col2: st.info(f"**Worker's Choice**\n{worker_choice}")
-            with col3: st.info(f"**Firm's Offer**\n{firm_choice if firm_choice else 'No offer (No Effort)'}")
-            if worker_choice == "No Effort":
+            with col3: st.info(f"**Firm's Offer**\n{firm_choice if firm_choice else 'No offer (No Education)'}")
+            if worker_choice == "No Education":
                 worker_payoff, firm_payoff = 4, 4
             else:
                 if ability == "High":
@@ -756,11 +756,11 @@ if name:
             col1, col2 = st.columns(2)
             with col1: st.success(f"**Worker ({worker_player})**\nPayoff: {worker_payoff}")
             with col2: st.success(f"**Firm ({firm_player})**\nPayoff: {firm_payoff}")
-            if worker_choice == "No Effort":
-                st.write("📉 **Outcome**: Worker chose no effort. Both parties receive baseline payoffs (4 each).")
-                st.write("💡 **Insight**: Without effort, the firm cannot distinguish ability, so both get the same moderate payoff.")
+            if worker_choice == "No Education":
+                st.write("📉 **Outcome**: Worker chose no Education. Both parties receive baseline payoffs (4 each).")
+                st.write("💡 **Insight**: Without Education, the firm cannot distinguish ability, so both get the same moderate payoff.")
             else:
-                st.write("📈 **Outcome**: Worker invested effort, firm made a job offer based on that signal.")
+                st.write("📈 **Outcome**: Worker invested Education, firm made a job offer based on that signal.")
                 if ability == "High":
                     if firm_choice == "Manager":
                         st.write("✅ **Result**: High-ability worker got the manager position - efficient matching!")
@@ -788,28 +788,28 @@ if name:
             if len(completed_results) >= 1:
                 high_choices = [r["choice"] for r in completed_results if r["ability"] == "High"]
                 low_choices = [r["choice"] for r in completed_results if r["ability"] == "Low"]
-                effort_responses = [r["firm_choice"] for r in completed_results if r["choice"] == "Effort" and r["firm_choice"]]
+                Education_responses = [r["firm_choice"] for r in completed_results if r["choice"] == "Education" and r["firm_choice"]]
 
                 st.subheader("🧮 Theory vs Your Class Results")
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    if effort_responses:
-                        manager_pct = len([r for r in effort_responses if r == "Manager"]) / len(effort_responses) * 100
+                    if Education_responses:
+                        manager_pct = len([r for r in Education_responses if r == "Manager"]) / len(Education_responses) * 100
                         st.metric("Firm Offers Manager", f"{manager_pct:.1f}%")
                     else:
                         st.metric("Firm Offers Manager", "N/A")
                 with col2:
                     if high_choices:
-                        high_effort_pct = len([c for c in high_choices if c == "Effort"]) / len(high_choices) * 100
-                        st.metric("High Ability Choose Effort", f"{high_effort_pct:.1f}%")
+                        high_Education_pct = len([c for c in high_choices if c == "Education"]) / len(high_choices) * 100
+                        st.metric("High Ability Choose Education", f"{high_Education_pct:.1f}%")
                     else:
-                        st.metric("High Ability Choose Effort", "N/A")
+                        st.metric("High Ability Choose Education", "N/A")
                 with col3:
                     if low_choices:
-                        low_effort_pct = len([c for c in low_choices if c == "Effort"]) / len(low_choices) * 100
-                        st.metric("Low Ability Choose Effort", f"{low_effort_pct:.1f}%")
+                        low_Education_pct = len([c for c in low_choices if c == "Education"]) / len(low_choices) * 100
+                        st.metric("Low Ability Choose Education", f"{low_Education_pct:.1f}%")
                     else:
-                        st.metric("Low Ability Choose Effort", "N/A")
+                        st.metric("Low Ability Choose Education", "N/A")
                 
                 if st.button("🔄 Refresh Results"):
                     st.rerun()
